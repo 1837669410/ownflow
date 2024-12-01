@@ -48,7 +48,9 @@ class ParamLayer(BaseLayer):
         self.w = np.empty(w_shape, dtype=np.float32)
         self.params['w'] = self.w
         if use_bias:
-            self.b = np.empty((1, w_shape[-1]), dtype=np.float32)
+            shape = [1] * len(w_shape)
+            shape[-1] = w_shape[-1]
+            self.b = np.empty(shape, dtype=np.float32)
             self.params['b'] = self.b
         self.use_bias = use_bias
 
@@ -75,6 +77,7 @@ class ParamLayer(BaseLayer):
             TypeError()
 
         self._wx_b = None
+        self._activation = None
 
 
 class Linear(ParamLayer):
@@ -114,3 +117,135 @@ class Linear(ParamLayer):
             grads['b'] = np.sum(delta, axis=0, keepdims=True)
         self.in_out['in'].set_error(delta @ self.w.T)
         return grads
+
+
+class Conv2D(ParamLayer):
+
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size=(3, 3),
+                 stride=1,
+                 padding=0,
+                 w_init=None,
+                 b_init=None,
+                 activation=None,
+                 use_bias=True
+                 ):
+        super().__init__(
+            w_shape=(in_channels,) + kernel_size + (out_channels,),
+            w_init=w_init,
+            b_init=b_init,
+            activation=activation,
+            use_bias=use_bias
+        )
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
+        self.stride = stride if isinstance(stride, tuple) else (stride, stride)
+        self.padding = padding if isinstance(padding, tuple) else (padding, padding)
+
+        self.pad_img = None
+
+    def forward(self, x):
+        # x: [b, c, h, w]
+        _x = self._process_input(x)
+
+        # pad
+        self.pad_img, tmp_conv = get_pad_and_get_tmp(_x, self.kernel_size, self.stride, self.out_channels, self.padding)
+
+        # conv
+        self._wx_b = self.convolution(self.pad_img, self.w, tmp_conv)
+        if self.use_bias:
+            self._wx_b += self.b.transpose(0, 3, 1, 2)
+
+        self._activation = self.activation.forward(self._wx_b)
+        out = self._warp_out(self._activation)
+        return out
+
+    def backward(self):
+        delta = self.in_out['out'].error
+        delta *= self.activation.backward(self._wx_b)
+
+        # dw, db
+        dw = np.empty_like(self.w) # [in_c, h, w, out_c]
+        # pad_img [b, in_c, h, w] -> [in_c, b, h, w]
+        # delta [b, out_c, h, w] -> [b, h, w, out_c]
+        # dw [in_c, h, w, out_c] -> [in_c, out_c, h, w]
+        dw = self.convolution(self.pad_img.transpose(1, 0, 2, 3), delta.transpose(0, 2, 3, 1), dw.transpose(0, 3, 1, 2))
+        grads = {'w': dw.transpose(0, 2, 3, 1)}
+        if self.use_bias:
+            # delta [b, out_c, h, w] -> [1, out_c, 1, 1] -> [1, 1, 1, out_c]
+            grads['b'] = np.sum(delta, axis=(0, 2, 3), keepdims=True).transpose(0, 2, 3, 1)
+
+        # dx
+        pad_dx = np.zeros_like(self.pad_img) # [b, in_c, h, w]
+        sh, sw, fh, fw = self.stride + self.kernel_size
+        # [in_c, h, w, out_c] -> [out_c, h, w, in_c]
+        f_t = self.w.transpose(3, 1, 2, 0)
+        for i in range(delta.shape[2]):
+            for j in range(delta.shape[3]):
+                # [b, out_c] @ [out_c, fh*fw*in_c] -> [b, fh*fw*in_c] -> [b, in_c, fh, fw]
+                pad_dx[:, :, i*sh: i*sh+fh, j*sw: j*sw+fw] += (delta[:, :, i, j].reshape(-1, self.out_channels) @
+                                                               f_t.reshape(self.out_channels, -1)
+                                                               ).reshape(-1, pad_dx.shape[1], fh, fw)
+        lh, rh = self.padding[0], pad_dx.shape[2] - self.padding[0]
+        lw, rw = self.padding[1], pad_dx.shape[3] - self.padding[1]
+        self.in_out['in'].set_error(pad_dx[:, :, lh: rh, lw: rw])
+        return grads
+
+    def convolution(self, x, flt, tmp_conv):
+        # x [b, in_c, h+ph, w+pw]
+        # flt [in_c, fh, fw, out_c]
+        b = x.shape[0]
+        fh, fw = flt.shape[1:3]
+        sh, sw = self.stride
+
+        for i in range(0, tmp_conv.shape[2]):
+            for j in range(0, tmp_conv.shape[3]):
+                seg_x = x[:, :, i*sh: i*sh+fh, j*sw: j*sw+fw].reshape(b, -1) # [b, in_c*h*w]
+                _flt = flt.reshape(-1, flt.shape[-1]) # [in_c*fh*fw, out_c]
+                tmp_conv[:, :, i, j] = seg_x @ _flt
+
+        return tmp_conv
+
+
+class Flatten(BaseLayer):
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        self._x = self._process_input(x)
+        out = self._x.reshape(self._x.shape[0], -1)
+        warp_out = self._warp_out(out)
+        return warp_out
+
+    def backward(self):
+        delta = self.in_out['out'].error
+        grad = None
+        self.in_out['in'].set_error(delta.reshape(self._x.shape))
+        return grad
+
+
+def get_pad_and_get_tmp(img, kernel_size, stride, out_channels, padding):
+    b, c, h, w = img.shape
+    (fh, fw), (sh, sw) = kernel_size, stride
+    ph, pw = padding
+
+    pad_img = np.pad(img, ((0, 0), (0, 0), (ph, ph), (pw, pw)), 'constant', constant_values=0).astype(np.float32)
+
+    h_out = int((h + 2 * ph - (fh - 1) - 1) / sh + 1)
+    w_out = int((w + 2 * pw - (fw - 1) - 1) / sw + 1)
+    tmp_conv = np.zeros((b, out_channels, h_out, w_out), dtype=np.float32)
+    return pad_img, tmp_conv
+
+
+if __name__ == '__main__':
+
+    data = np.random.normal(0, 0.01, (2, 1, 32, 32))
+    conv1 = Conv2D(1, 16, (3, 3), 1, 1)
+    conv1.forward(data)
+
+    conv1.backward()
