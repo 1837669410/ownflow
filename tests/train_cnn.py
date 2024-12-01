@@ -10,31 +10,34 @@ class SimpleCNN(of.Module):
     def __init__(self):
         super().__init__()
 
-        self.conv1 = of.layers.Conv2D(1, 8, (3, 3), 2, 1,
+        self.conv1 = of.layers.Conv2D(1, 8, (3, 3), 1, 1,
                                       w_init=of.initializers.Kaiming_Uniform_(math.sqrt(5)),
                                       activation=of.activations.Gelu())
-        self.conv2 = of.layers.Conv2D(8, 16, (3, 3), 2, 1,
+        self.pool1 = of.layers.Maxpool2D(pool_size=(2, 2), stride=2)
+        self.conv2 = of.layers.Conv2D(8, 16, (3, 3), 1, 1,
                                       w_init=of.initializers.Kaiming_Uniform_(math.sqrt(5)),
                                       activation=of.activations.Gelu())
-        self.conv3 = of.layers.Conv2D(16, 32, (3, 3), 2, 1,
+        self.pool2 = of.layers.Maxpool2D(pool_size=(2, 2), stride=2)
+        self.conv3 = of.layers.Conv2D(16, 32, (3, 3), 1, 1,
                                       w_init=of.initializers.Kaiming_Uniform_(math.sqrt(5)),
                                       activation=of.activations.Gelu())
+        self.pool3 = of.layers.Maxpool2D(pool_size=(2, 2), stride=2)
         self.flatten = of.layers.Flatten()
-        self.linear1 = of.layers.Linear(32 * 4 * 4, 10,
+        self.linear1 = of.layers.Linear(32 * 3 * 3, 10,
                                         w_init=of.initializers.Kaiming_Uniform_(math.sqrt(5)))
 
     def forward(self, x):
         b, h, w = x.shape
         x = x.reshape(b, 1, h, w)
         # [b, 1, 28, 28] -> [b, 8, 14, 14]
-        out = self.conv1.forward(x)
+        out = self.pool1.forward(self.conv1.forward(x))
         # [b, 8, 14, 14] -> [b, 16, 7, 7]
-        out = self.conv2.forward(out)
-        # [b, 16, 7, 7] -> [b, 32, 4, 4]
-        out = self.conv3.forward(out)
-        # [b, 32, 4, 4] -> [b, 32 * 4 * 4]
+        out = self.pool2.forward(self.conv2.forward(out))
+        # [b, 16, 7, 7] -> [b, 32, 3, 3]
+        out = self.pool3.forward(self.conv3.forward(out))
+        # [b, 32, 3, 3] -> [b, 32 * 3 * 3]
         out = self.flatten.forward(out)
-        # [b, 32 * 4 * 4] -> [b, 10]
+        # [b, 32 * 3 * 3] -> [b, 10]
         out = self.linear1.forward(out)
         return out
 
