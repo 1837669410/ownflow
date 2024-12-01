@@ -34,7 +34,7 @@ class CrossEntropyLoss(Loss):
         pred -= np.max(pred, axis=-1, keepdims=True) # 稳定softmax
         pred = np.exp(pred + self._eps) / np.sum(np.exp(pred + self._eps), axis=-1, keepdims=True)
 
-        loss = -np.mean(target * np.log(pred))
+        loss = -np.mean(target * np.log(pred + self._eps))
 
         loss_delta = (pred - target) / pred.shape[0]
 
