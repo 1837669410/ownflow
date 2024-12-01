@@ -29,8 +29,9 @@ class Module:
 
         for layer in self.order_layers[::-1]:
             grads = layer.backward()
-            for k, v in grads.items():
-                self.params[layer.name]['grads'][k][:] = v
+            if isinstance(layer, of.layers.ParamLayer):
+                for k, v in grads.items():
+                    self.params[layer.name]['grads'][k][:] = v
 
     def __setattr__(self, key, value):
         if isinstance(value, of.layers.ParamLayer):
