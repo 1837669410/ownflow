@@ -3,5 +3,8 @@ from ownflow import activations
 from ownflow import initializers
 from ownflow import layers
 from ownflow import module
+from ownflow import dataloader
+from ownflow import losses
 from ownflow import optimizers
+from ownflow import metrics
 from ownflow.module import Module
