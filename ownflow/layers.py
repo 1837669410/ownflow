@@ -229,6 +229,148 @@ class Flatten(BaseLayer):
         return grad
 
 
+class Pool(BaseLayer):
+
+    def __init__(self,
+                 pool_size=(2, 2),
+                 stride=2,
+                 padding=0
+                 ):
+        super().__init__()
+
+        self.pool_size = pool_size if isinstance(pool_size, tuple) else (pool_size, pool_size)
+        self.stride = stride if isinstance(stride, tuple) else (stride, stride)
+        self.padding = padding if isinstance(padding, tuple) else (padding, padding)
+
+        self.pad_img = None
+
+    def forward(self, x):
+        # x [b, in_c, h, w]
+        self._x = self._process_input(x)
+
+        self.pad_img, tmp_pool = get_pad_and_get_tmp(self._x, self.pool_size, self.stride, self._x.shape[1], self.padding)
+
+        fh, fw = self.pool_size
+        sh, sw = self.stride
+
+        for i in range(tmp_pool.shape[2]):
+            for j in range(tmp_pool.shape[3]):
+                window = self.pad_img[:, :, i*sh: i*sh+fh, j*sw: j*sw+fw]
+                tmp_pool[:, :, i, j] = self.special_pool(window)
+        warp_out = self._warp_out(tmp_pool)
+        return warp_out
+
+    def special_pool(self, x):
+        raise NotImplementedError
+
+
+class Maxpool2D(Pool):
+
+    def __init__(self,
+                 pool_size=(2, 2),
+                 stride=2,
+                 padding=0
+                 ):
+        super().__init__(
+            pool_size,
+            stride,
+            padding
+        )
+
+    def special_pool(self, x):
+        return np.max(x, axis=(2, 3))
+
+    def backward(self):
+        delta = self.in_out['out'].error
+        grads = None
+
+        fh, fw = self.pool_size
+        sh, sw = self.stride
+
+        pad_dx = np.zeros_like(self.pad_img)
+        for i in range(delta.shape[2]):
+            for j in range(delta.shape[3]):
+                window = self.pad_img[:, :, i*sh: i*sh+fh, j*sw: j*sw+fw]
+                mask = window == np.max(window, axis=(2, 3), keepdims=True)
+                window_delta = delta[:, :, i: i+1, j: j+1] * mask
+                pad_dx[:, :, i*sh: i*sh+fh, j*sw: j*sw+fw] += window_delta
+
+        lh, rh = self.padding[0], pad_dx.shape[2] - self.padding[0]
+        lw, rw = self.padding[1], pad_dx.shape[3] - self.padding[1]
+        self.in_out['in'].set_error(pad_dx[:, :, lh: rh, lw: rw])
+        return grads
+
+
+class Avgpool2D(Pool):
+
+    def __init__(self,
+                 pool_size=(2, 2),
+                 stride=2,
+                 padding=0
+                 ):
+        super().__init__(
+            pool_size,
+            stride,
+            padding
+        )
+
+    def special_pool(self, x):
+        return np.mean(x, axis=(2, 3))
+
+    def backward(self):
+        delta = self.in_out['out'].error
+        grads = None
+
+        fh, fw = self.pool_size
+        sh, sw = self.stride
+
+        pad_dx = np.zeros_like(self.pad_img)
+        for i in range(delta.shape[2]):
+            for j in range(delta.shape[3]):
+                window_delta = delta[:, :, i: i+1, j: j+1] * 1.0 / (fh * fw)
+                pad_dx[:, :, i*sh: i*sh+fh, j*sw: j*sw+fw] += window_delta
+
+        lh, rh = self.padding[0], pad_dx.shape[2] - self.padding[0]
+        lw, rw = self.padding[1], pad_dx.shape[3] - self.padding[1]
+        self.in_out['in'].set_error(pad_dx[:, :, lh: rh, lw: rw])
+        return grads
+
+
+class Embedding(ParamLayer):
+
+    def __init__(self,
+                 num_embeddings,
+                 embedding_dim,
+                 w_init=None,
+                 b_init=None,
+                 ):
+        super().__init__(
+            w_shape=(num_embeddings, embedding_dim),
+            w_init=w_init,
+            b_init=b_init,
+            activation=None,
+            use_bias=None
+        )
+
+    def forward(self, ids):
+        self._ids = self._process_input(ids)
+        self._ids = self._ids.astype(np.int32)
+        out = self.w[self._ids.astype(np.int32)]
+        warp_out = self._warp_out(out)
+        return warp_out
+
+    def backward(self):
+        delta = self.in_out['out'].error
+
+        dw = np.zeros_like(self.w)
+        for i in range(delta.shape[0]):
+            dw[self._ids[i]] += delta[i]
+        grads = {'w': dw}
+
+        self.in_out['in'].set_error(None)
+        return grads
+
+
 def get_pad_and_get_tmp(img, kernel_size, stride, out_channels, padding):
     b, c, h, w = img.shape
     (fh, fw), (sh, sw) = kernel_size, stride
@@ -238,14 +380,20 @@ def get_pad_and_get_tmp(img, kernel_size, stride, out_channels, padding):
 
     h_out = int((h + 2 * ph - (fh - 1) - 1) / sh + 1)
     w_out = int((w + 2 * pw - (fw - 1) - 1) / sw + 1)
-    tmp_conv = np.zeros((b, out_channels, h_out, w_out), dtype=np.float32)
-    return pad_img, tmp_conv
+    tmp_data = np.zeros((b, out_channels, h_out, w_out), dtype=np.float32)
+    return pad_img, tmp_data
 
 
 if __name__ == '__main__':
 
-    data = np.random.normal(0, 0.01, (2, 1, 32, 32))
-    conv1 = Conv2D(1, 16, (3, 3), 1, 1)
-    conv1.forward(data)
+    embedding = Embedding(3, 5)
+    print(embedding.w)
 
-    conv1.backward()
+    data = np.array([[1, 0, 0],
+                     [0, 1, 0]])
+
+    out = embedding.forward(data)
+    print(out.data.shape)
+
+    grads = embedding.backward()
+    print(grads)
