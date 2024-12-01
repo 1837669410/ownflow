@@ -54,13 +54,18 @@ class ParamLayer(BaseLayer):
 
         if w_init is None:
             self.w[:] = np.random.normal(0., 0.01, self.w.shape)
+        elif isinstance(w_init, of.initializers.Initializer):
+            w_init.init(self.w)
         else:
             TypeError()
 
-        if b_init is None:
-            self.b[:] = np.full(self.b.shape, 0.)
-        else:
-            TypeError()
+        if use_bias:
+            if b_init is None:
+                self.b[:] = np.full(self.b.shape, 0.)
+            elif isinstance(b_init, of.initializers.Initializer):
+                b_init.init(self.b)
+            else:
+                TypeError()
 
         if activation is None:
             self.activation = of.activations.Linear()
