@@ -39,7 +39,6 @@ if __name__ == '__main__':
     opt = of.optimizers.SGD(model.params, lr=0.001)
 
     plt.ion()
-    fig, ax = plt.subplots()
 
     for i in range(200):
         out = model.forward(x)
