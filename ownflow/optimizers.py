@@ -18,17 +18,40 @@ class Optimizer:
 
 class SGD(Optimizer):
 
-    def __init__(self, params, lr=0.001, momentum=0.9):
+    def __init__(self, params, lr=0.001, momentum=0.9, weight_decay=0):
         super().__init__(params, lr)
 
         self._momentum = momentum
+        self._weight_decay = weight_decay
         self._mv = [np.zeros_like(v) for v in self.vars]
 
     def step(self):
         for var, grad, mv in zip(self.vars, self.grads, self._mv):
-            dv = self._lr * grad
+            dv = self._lr * (grad + self._weight_decay * var)
             mv[:] = self._momentum * mv + dv
             var -= mv
+
+
+class Adagrad(Optimizer):
+
+    def __init__(self, params, lr=0.01, lr_decay=0, weight_decay=0, eps=1e-8):
+        super().__init__(params, lr)
+
+        self._lr_decay = lr_decay
+        self._weight_decay = weight_decay
+        self._eps = eps
+        self._mv = [np.zeros_like(v) for v in self.vars]
+        self._init_t = 0
+
+    def step(self):
+        _lr = self._lr / (1 + self._init_t * self._lr_decay)
+        for var, grad, mv in zip(self.vars, self.grads, self._mv):
+            if self._weight_decay != 0:
+                grad += self._weight_decay * var
+            mv += grad ** 2
+            var -= _lr * grad / (np.sqrt(mv) + self._eps)
+        self._init_t += 1
+
 
 
 if __name__ == '__main__':
@@ -42,8 +65,8 @@ if __name__ == '__main__':
 
             import ownflow as of
 
-            self.linear1 = of.layer.Linear(3, 4)
-            self.linear2 = of.layer.Linear(4, 1)
+            self.linear1 = of.layers.Linear(3, 4)
+            self.linear2 = of.layers.Linear(4, 1)
 
         def forward(self, x):
             out1 = self.linear1.forward(x)
