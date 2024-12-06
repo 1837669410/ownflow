@@ -143,6 +143,33 @@ class Adamax(Optimizer):
         self._init_t += 1
 
 
+class NAdam(Optimizer):
+
+    def __init__(self, params, lr=0.002, beta=(0.9, 0.999), weight_decay=0, eps=1e-8, momentum_decay=0.004):
+        super().__init__(params, lr)
+
+        self._beta1, self._beta2 = beta[0], beta[1]
+        self._weight_decay = weight_decay
+        self._eps = eps
+        self._momentum_decay = momentum_decay
+        self._m = [np.zeros_like(v) for v in self.vars]
+        self._v = [np.zeros_like(v) for v in self.vars]
+        self._init_t = 0
+
+    def step(self):
+        for var, grad, m, v in zip(self.vars, self.grads, self._m, self._v):
+            if self._weight_decay != 0:
+                grad += self._weight_decay * var
+            ut = self._beta1 * (1 - 1 / 2 * 0.96 ** ((self._init_t + 1) * self._momentum_decay))
+            ut1 = self._beta1 * (1 - 1 / 2 * 0.96 ** ((self._init_t + 2) ** self._momentum_decay))
+            m[:] + self._beta1 * m + (1 - self._beta1) * grad
+            v[:] = self._beta2 * v + (1 - self._beta2) * grad ** 2
+            mt = ut1 * m / (1 - ut+1) + (1 - ut) * grad / (1 - ut)
+            vt = v / (1 - self._beta2 ** (self._init_t + 1))
+            var -= self._lr * mt / (np.sqrt(vt) + self._eps)
+        self._init_t += 1
+
+
 if __name__ == '__main__':
 
     import ownflow as of
