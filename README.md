@@ -7,6 +7,8 @@
 - 2024.12.2: 给优化器都加上weight_decay选项并实现新优化器Adagrad
 - 2024.12.3: 实现Adadelta、Adam、AdamW、Adamax优化器
 - 2024.12.6: 实现NAdam优化器
+- 2024.12.7: 根据pytorch官网公式修改SGD代码，添加nesterov选择，实现RMSprop优化器
 
 # 参考
 - 框架: [**npnet**](https://github.com/MorvanZhou/npnet)
+- pytorch: [**pytorch**](https://pytorch.org/)
