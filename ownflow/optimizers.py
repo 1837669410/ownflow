@@ -18,18 +18,33 @@ class Optimizer:
 
 class SGD(Optimizer):
 
-    def __init__(self, params, lr=0.001, momentum=0.9, weight_decay=0):
+    def __init__(self, params, lr=0.001, momentum=0.9, dampening=0, weight_decay=0, nesterov=False):
         super().__init__(params, lr)
 
         self._momentum = momentum
+        self._dampening = dampening
         self._weight_decay = weight_decay
-        self._mv = [np.zeros_like(v) for v in self.vars]
+        self._nesterov = nesterov
+        self._bt = [np.zeros_like(v) for v in self.vars]
+        self._init_t = 0
 
     def step(self):
-        for var, grad, mv in zip(self.vars, self.grads, self._mv):
-            dv = self._lr * (grad + self._weight_decay * var)
-            mv[:] = self._momentum * mv + dv
-            var -= mv
+        for var, grad, bt in zip(self.vars, self.grads, self._bt):
+            if self._weight_decay != 0:
+                grad += self._weight_decay * var
+            if self._momentum != 0:
+                if self._init_t > 0:
+                    bt[:] = self._momentum * bt + (1 - self._dampening) * grad
+                else:
+                    bt[:] = grad
+                if self._nesterov:
+                    grad += self._momentum * bt
+                else:
+                    grad = bt
+            var -= self._lr * grad
+            # dv = self._lr * (grad + self._weight_decay * var)
+            # mv[:] = self._momentum * mv + dv
+            # var -= mv
 
 
 class Adagrad(Optimizer):
@@ -168,6 +183,36 @@ class NAdam(Optimizer):
             vt = v / (1 - self._beta2 ** (self._init_t + 1))
             var -= self._lr * mt / (np.sqrt(vt) + self._eps)
         self._init_t += 1
+
+
+class RMSprop(Optimizer):
+
+    def __init__(self, params, lr=0.01, alpha=0.99, eps=1e-8, weight_decay=0, momentum=0, centered=False):
+        super().__init__(params, lr)
+
+        self._alpha = alpha
+        self._eps = eps
+        self._weight_decay = weight_decay
+        self._momentum = momentum
+        self._centered = centered
+        self._v = [np.zeros_like(v) for v in self.vars]
+        self._gt = [np.zeros_like(v) for v in self.vars]
+        self._b = [np.zeros_like(v) for v in self.vars]
+
+    def step(self):
+        for var, grad, v, gt, b in zip(self.vars, self.grads, self._v, self._gt, self._b):
+            if self._weight_decay != 0:
+                grad += self._weight_decay * var
+            v[:] = self._alpha * v + (1 - self._alpha) * grad ** 2
+            _v = v
+            if self._centered:
+                gt[:] = gt * self._alpha + (1 - self._alpha) * grad
+                _v = _v - gt ** 2
+            if self._momentum > 0:
+                b[:] = self._momentum * b + grad / (np.sqrt(_v) + self._eps)
+                var -= self._lr * b
+            else:
+                var -= self._lr * grad / (np.sqrt(_v) + self._eps)
 
 
 if __name__ == '__main__':
