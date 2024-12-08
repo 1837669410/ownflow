@@ -8,6 +8,7 @@
 - 2024.12.3: 实现Adadelta、Adam、AdamW、Adamax优化器
 - 2024.12.6: 实现NAdam优化器
 - 2024.12.7: 根据pytorch官网公式修改SGD代码，添加nesterov选择，实现RMSprop优化器
+- 2024.12.8: 添加dropout层，并且给model添加了train和test两种状态，可以正确的控制dropout在不同情况下的行为
 
 # 参考
 - 框架: [**npnet**](https://github.com/MorvanZhou/npnet)
