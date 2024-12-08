@@ -371,6 +371,36 @@ class Embedding(ParamLayer):
         return grads
 
 
+class Dropout(BaseLayer):
+
+    def __init__(self, dropout_rate=0):
+        super().__init__()
+
+        self.dropout_rate = dropout_rate
+        self.mask = None
+
+    def set_dropout_rate(self, value):
+        self.dropout_rate = value
+
+    def forward(self, x):
+        _x = self._process_input(x)
+
+        self.mask = np.random.binomial(1, 1 - self.dropout_rate, size=_x.shape)
+
+        out = _x * self.mask
+        out /= (1 - self.dropout_rate)
+
+        warp_out = self._warp_out(out)
+        return warp_out
+
+    def backward(self):
+        delta = self.in_out['out'].error
+        grads = None
+        delta = delta * self.mask / (1 - self.dropout_rate)
+        self.in_out['in'].set_error(delta)
+        return grads
+
+
 def get_pad_and_get_tmp(img, kernel_size, stride, out_channels, padding):
     b, c, h, w = img.shape
     (fh, fw), (sh, sw) = kernel_size, stride
@@ -382,18 +412,3 @@ def get_pad_and_get_tmp(img, kernel_size, stride, out_channels, padding):
     w_out = int((w + 2 * pw - (fw - 1) - 1) / sw + 1)
     tmp_data = np.zeros((b, out_channels, h_out, w_out), dtype=np.float32)
     return pad_img, tmp_data
-
-
-if __name__ == '__main__':
-
-    embedding = Embedding(3, 5)
-    print(embedding.w)
-
-    data = np.array([[1, 0, 0],
-                     [0, 1, 0]])
-
-    out = embedding.forward(data)
-    print(out.data.shape)
-
-    grads = embedding.backward()
-    print(grads)
