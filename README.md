@@ -9,6 +9,7 @@
 - 2024.12.6: 实现NAdam优化器
 - 2024.12.7: 根据pytorch官网公式修改SGD代码，添加nesterov选择，实现RMSprop优化器
 - 2024.12.8: 添加dropout层，并且给model添加了train和test两种状态，可以正确的控制dropout在不同情况下的行为
+- 2024.12.10: 重构train和test状态设置方式，变成显示设置，实现了RRelu激活函数和dropout在train和test状态下的不同行为
 
 # 参考
 - 框架: [**npnet**](https://github.com/MorvanZhou/npnet)
