@@ -6,7 +6,7 @@ class Activation:
     def __init__(self):
         pass
 
-    def forward(self, x):
+    def forward(self, x, training):
         pass
 
     def backward(self, x):
@@ -18,7 +18,7 @@ class Linear(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return x
 
     def backward(self, x):
@@ -32,7 +32,7 @@ class Threshold(Activation):
         self._threshold = threshold
         self._value = value
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.where(x > self._threshold, x, self._value)
 
     def backward(self, x):
@@ -44,7 +44,7 @@ class Relu(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.maximum(0, x)
 
     def backward(self, x):
@@ -61,8 +61,11 @@ class RRelu(Activation):
         self._high = high
         self._alpha = None
 
-    def forward(self, x):
-        self._alpha = np.random.uniform(self._low, self._high, x.shape)
+    def forward(self, x, training=None):
+        if training:
+            self._alpha = np.random.uniform(self._low, self._high, x.shape)
+        else:
+            self._alpha = np.full(x.shape, (self._low + self._high) / 2)
         return np.where(x > 0, x, self._alpha * x)
 
     def backward(self, x):
@@ -77,7 +80,7 @@ class HardTanh(Activation):
         self._min_val = min_val
         self._max_val = max_val
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.clip(x, self._min_val, self._max_val)
 
     def backward(self, x):
@@ -89,7 +92,7 @@ class Relu6(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.clip(x, 0, 6)
 
     def backward(self, x):
@@ -101,7 +104,7 @@ class Sigmoid(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return 1.0 / (1.0 + np.exp(-x))
 
     def backward(self, x):
@@ -113,7 +116,7 @@ class HardSigmoid(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.where(x > -3, np.where(x < 3, x / 6 + 0.5, np.ones_like(x)), np.zeros_like(x))
 
     def backward(self, x):
@@ -125,7 +128,7 @@ class Tanh(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.tanh(x)
 
     def backward(self, x):
@@ -137,7 +140,7 @@ class Silu(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return x / (1.0 + np.exp(-x))
 
     def backward(self, x):
@@ -151,7 +154,7 @@ class Mish(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return x * np.tanh(np.log(1 + np.exp(x)))
 
     def backward(self, x):
@@ -166,7 +169,7 @@ class HardSwish(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.where(x > -3, np.where(x < 3, x * (x + 3) / 6, x), np.zeros_like(x))
 
     def backward(self, x):
@@ -180,7 +183,7 @@ class Elu(Activation):
 
         self._alpha = alpha
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.where(x > 0, x, self._alpha * (np.exp(x) - 1))
 
     def backward(self, x):
@@ -194,7 +197,7 @@ class Celu(Activation):
 
         self._alpha = alpha
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.where(x > 0, x, self._alpha * (np.exp(x / self._alpha) - 1))
 
     def backward(self, x):
@@ -209,7 +212,7 @@ class Selu(Activation):
         self._alpha = alpha
         self._scale = scale
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.where(x > 0, self._scale * x, self._scale * self._alpha * (np.exp(x) - 1))
 
     def backward(self, x):
@@ -221,7 +224,7 @@ class Gelu(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return 0.5 * x * (1 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * x ** 3)))
 
     def backward(self, x):
@@ -240,7 +243,7 @@ class HandShrink(Activation):
 
         self._lambd = lambd
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.where(x > -self._lambd, np.where(x < self._lambd, 0, x), x)
 
     def backward(self, x):
@@ -254,7 +257,7 @@ class LeakyRelu(Activation):
 
         self._alpha = alpha
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.where(x > 0, x, self._alpha * x)
 
     def backward(self, x):
@@ -266,7 +269,7 @@ class LogSigmoid(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.log(1 / (1 + np.exp(-x)))
 
     def backward(self, x):
@@ -281,7 +284,7 @@ class Softplus(Activation):
         self._beta = beta
         self._threshold = threshold
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.where(x * self._beta > self._threshold, x, (1 / self._beta) * np.log(1 + np.exp(self._beta * x)))
 
     def backward(self, x):
@@ -295,7 +298,7 @@ class SoftShrink(Activation):
 
         self._lambd = lambd
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.where(x > -self._lambd, np.where(x < self._lambd, 0, x - self._lambd), x + self._lambd)
 
     def backward(self, x):
@@ -307,7 +310,7 @@ class SoftSign(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return np.where(x > 0, x / (1 + x), x / (1 - x))
 
     def backward(self, x):
@@ -319,7 +322,7 @@ class TanhShrink(Activation):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=None):
         return x - np.tanh(x)
 
     def backward(self, x):
