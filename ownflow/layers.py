@@ -15,7 +15,7 @@ class BaseLayer:
         self._x = None
 
     @abstractmethod
-    def forward(self, x: typing.Union[np.ndarray | of.variable.Variable]) -> of.variable.Variable:
+    def forward(self, x: typing.Union[np.ndarray | of.variable.Variable], training: bool) -> of.variable.Variable:
         pass
 
     @abstractmethod
@@ -97,14 +97,14 @@ class Linear(ParamLayer):
             use_bias=use_bias
         )
 
-    def forward(self, x):
+    def forward(self, x, training=True):
         self._x = self._process_input(x)
         self._wx_b = self._x @ self.w
 
         if self.use_bias:
             self._wx_b += self.b
 
-        self._activation = self.activation.forward(self._wx_b)
+        self._activation = self.activation.forward(self._wx_b, training)
         out = self._warp_out(self._activation)
         return out
 
@@ -148,7 +148,7 @@ class Conv2D(ParamLayer):
 
         self.pad_img = None
 
-    def forward(self, x):
+    def forward(self, x, training=True):
         # x: [b, c, h, w]
         _x = self._process_input(x)
 
@@ -160,7 +160,7 @@ class Conv2D(ParamLayer):
         if self.use_bias:
             self._wx_b += self.b.transpose(0, 3, 1, 2)
 
-        self._activation = self.activation.forward(self._wx_b)
+        self._activation = self.activation.forward(self._wx_b, training)
         out = self._warp_out(self._activation)
         return out
 
@@ -216,7 +216,7 @@ class Flatten(BaseLayer):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, training=True):
         self._x = self._process_input(x)
         out = self._x.reshape(self._x.shape[0], -1)
         warp_out = self._warp_out(out)
@@ -244,7 +244,7 @@ class Pool(BaseLayer):
 
         self.pad_img = None
 
-    def forward(self, x):
+    def forward(self, x, training=True):
         # x [b, in_c, h, w]
         self._x = self._process_input(x)
 
@@ -352,7 +352,7 @@ class Embedding(ParamLayer):
             use_bias=None
         )
 
-    def forward(self, ids):
+    def forward(self, ids, training=True):
         self._ids = self._process_input(ids)
         self._ids = self._ids.astype(np.int32)
         out = self.w[self._ids.astype(np.int32)]
@@ -382,10 +382,13 @@ class Dropout(BaseLayer):
     def set_dropout_rate(self, value):
         self.dropout_rate = value
 
-    def forward(self, x):
+    def forward(self, x, training=True):
         _x = self._process_input(x)
 
-        self.mask = np.random.binomial(1, 1 - self.dropout_rate, size=_x.shape)
+        if training:
+            self.mask = np.random.binomial(1, 1 - self.dropout_rate, size=_x.shape)
+        else:
+            self.mask = np.ones_like(_x)
 
         out = _x * self.mask
         out /= (1 - self.dropout_rate)
