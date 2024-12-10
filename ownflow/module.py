@@ -13,25 +13,8 @@ class Module:
         self._dropout_rate = {}
 
     @abstractmethod
-    def forward(self, x):
+    def forward(self, x, training=True):
         pass
-
-    def train(self):
-        for key, value in self.__dict__.items():
-            if isinstance(value, of.layers.ParamLayer):
-                continue
-            layer = value
-            if key.startswith('dropout'):
-                layer.set_dropout_rate(self._dropout_rate[key])
-
-    def test(self):
-        for key, value in self.__dict__.items():
-            if isinstance(value, of.layers.ParamLayer):
-                continue
-            layer = value
-            if key.startswith('dropout'):
-                self._dropout_rate[key] = layer.dropout_rate
-                layer.set_dropout_rate(0)
 
     def backward(self, loss):
         layers = []
@@ -69,13 +52,13 @@ if __name__ == '__main__':
 
             import ownflow as of
 
-            self.linear1 = of.layers.Linear(3, 4)
+            self.linear1 = of.layers.Linear(3, 4, activation=of.activations.RRelu())
             self.dropout1 = of.layers.Dropout(0.2)
             self.linear2 = of.layers.Linear(4, 1)
 
-        def forward(self, x):
+        def forward(self, x, training=True):
             out1 = self.linear1.forward(x)
-            out2 = self.linear2.forward(self.dropout1.forward(out1))
+            out2 = self.linear2.forward(self.dropout1.forward(out1, training))
             return out2
 
     x = np.ones((2, 3))
@@ -86,7 +69,7 @@ if __name__ == '__main__':
     # print(model.params['linear1']['grads'])
     # print(model.params['linear2']['grads'])
 
-    out2 = model.forward(x)
+    out2 = model.forward(x, training=False)
     loss = out2.data - y
 
     model.backward(loss)
